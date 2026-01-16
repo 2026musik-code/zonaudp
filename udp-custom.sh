@@ -78,7 +78,7 @@ function install_udp_custom() {
     echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
     echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
 
-    apt-get install -y wget net-tools iptables-persistent jq curl
+    apt-get install -y wget net-tools iptables-persistent jq curl openssl
 
     # 2. Check Port 6000
     if netstat -tuln | grep -q ":6000 "; then
@@ -141,46 +141,29 @@ function install_udp_custom() {
     fi
     chmod +x "$BINARY_PATH"
 
-    # 5. Create Config Directory & File
+    # 5. Generate SSL Certificate (Required by ZIVPN Native)
+    echo_info "Generating Self-Signed Certificate..."
     mkdir -p "$CONFIG_DIR"
-    # Create valid JSON
+    openssl req -new -newkey rsa:2048 -days 365 -nodes -x509 \
+        -subj "/C=ID/ST=Jawa Barat/L=Bandung/O=ZIVPN/OU=IT/CN=zivpn" \
+        -keyout "$CONFIG_DIR/server.key" -out "$CONFIG_DIR/server.crt" 2>/dev/null
+
+    # 6. Create Config File (Native ZIVPN Format)
+    # Using 'passwords' mode as seen in standard implementations
     cat <<EOF > "$CONFIG_FILE"
 {
+  "listen": ":6000",
+  "cert": "$CONFIG_DIR/server.crt",
+  "key": "$CONFIG_DIR/server.key",
   "obfs": "$obfs_key",
-  "port": 6000,
-  "users": [
-    {
-      "username": "$username",
-      "password": "$password"
-    }
-  ]
+  "auth": {
+    "mode": "passwords",
+    "config": [
+      "$username:$password"
+    ]
+  }
 }
 EOF
-
-    # 6. Create Launcher Script (Parses JSON and runs binary)
-    # This abstraction allows us to manage users in JSON and feed them to the binary via flags
-    LAUNCHER_PATH="/usr/local/bin/udp-custom-launcher.sh"
-    cat <<'EOF' > "$LAUNCHER_PATH"
-#!/bin/bash
-CONFIG_FILE="/etc/udp-custom/config.json"
-BINARY="/usr/local/bin/udp-custom"
-
-# Read config using jq
-OBFS=$(jq -r '.obfs' $CONFIG_FILE)
-PORT=$(jq -r '.port' $CONFIG_FILE)
-
-# Construct Auth Args
-# Example assumes binary takes repeated --auth user:pass. Adjust if binary differs.
-AUTH_ARGS=""
-while IFS=":" read -r user pass; do
-    AUTH_ARGS="$AUTH_ARGS --auth $user:$pass"
-done < <(jq -r '.users[] | "\(.username):\(.password)"' $CONFIG_FILE)
-
-# Run Binary
-# Using exec to replace shell process
-exec "$BINARY" --port "$PORT" --obfs "$OBFS" $AUTH_ARGS
-EOF
-    chmod +x "$LAUNCHER_PATH"
 
     # 7. Systemd Service
     echo_info "Creating Systemd Service..."
@@ -192,8 +175,13 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=$LAUNCHER_PATH
+WorkingDirectory=$CONFIG_DIR
+ExecStart=$BINARY_PATH -c $CONFIG_FILE
 Restart=always
+Environment=ZIVPN_LOG_LEVEL=info
+CapabilityBoundingSet=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+AmbientCapabilities=CAP_NET_ADMIN CAP_NET_BIND_SERVICE CAP_NET_RAW
+NoNewPrivileges=true
 
 [Install]
 WantedBy=multi-user.target
@@ -239,18 +227,18 @@ function manage_users() {
                 read -p "Enter New Username: " new_user
                 if [[ -z "$new_user" ]]; then echo_error "Username cannot be empty"; pause; continue; fi
 
-                # Check exist
-                if jq -e --arg u "$new_user" '.users[] | select(.username == $u)' "$CONFIG_FILE" >/dev/null; then
+                read -p "Enter Password: " new_pass
+                if [[ -z "$new_pass" ]]; then echo_error "Password cannot be empty"; pause; continue; fi
+
+                # Check if user exists (checking prefix before :)
+                if jq -e --arg u "$new_user" '.auth.config | any(startswith($u + ":"))' "$CONFIG_FILE" >/dev/null; then
                     echo_error "User $new_user already exists."
                     pause
                     continue
                 fi
 
-                read -p "Enter Password: " new_pass
-                if [[ -z "$new_pass" ]]; then echo_error "Password cannot be empty"; pause; continue; fi
-
-                # Add
-                jq --arg u "$new_user" --arg p "$new_pass" '.users += [{"username": $u, "password": $p}]' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+                # Add user in "user:pass" format
+                jq --arg entry "$new_user:$new_pass" '.auth.config += [$entry]' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
                 echo_success "User added."
                 systemctl restart udp-custom
                 pause
@@ -258,13 +246,16 @@ function manage_users() {
             2)
                 echo_info "Current Users:"
                 printf "%-20s %-20s\n" "Username" "Password"
-                jq -r '.users[] | "\(.username) \(.password)"' "$CONFIG_FILE" | while read -r u p; do
+                # Parse "user:pass" strings
+                jq -r '.auth.config[]' "$CONFIG_FILE" | while IFS=":" read -r u p; do
                     printf "%-20s %-20s\n" "$u" "$p"
                 done
 
                 read -p "Enter Username to delete: " del_user
-                if jq -e --arg u "$del_user" '.users[] | select(.username == $u)' "$CONFIG_FILE" >/dev/null; then
-                     jq --arg u "$del_user" 'del(.users[] | select(.username == $u))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
+                # Check exist
+                if jq -e --arg u "$del_user" '.auth.config | any(startswith($u + ":"))' "$CONFIG_FILE" >/dev/null; then
+                     # Delete element starting with user:
+                     jq --arg u "$del_user" '.auth.config |= map(select(startswith($u + ":") | not))' "$CONFIG_FILE" > "$CONFIG_FILE.tmp" && mv "$CONFIG_FILE.tmp" "$CONFIG_FILE"
                      echo_success "User $del_user deleted."
                      systemctl restart udp-custom
                 else
@@ -276,7 +267,7 @@ function manage_users() {
                 echo_info "User List:"
                 printf "%-20s %-20s\n" "Username" "Password"
                 echo "----------------------------------------"
-                jq -r '.users[] | "\(.username) \(.password)"' "$CONFIG_FILE" | while read -r u p; do
+                jq -r '.auth.config[]' "$CONFIG_FILE" | while IFS=":" read -r u p; do
                     printf "%-20s %-20s\n" "$u" "$p"
                 done
                 pause
@@ -354,7 +345,6 @@ function uninstall_udp_custom() {
     echo_info "Removing Files..."
     rm -rf "$CONFIG_DIR"
     rm -f "$BINARY_PATH"
-    rm -f "/usr/local/bin/udp-custom-launcher.sh"
 
     echo_info "Removing Iptables Rules..."
     iptables -t nat -D PREROUTING -p udp --dport 6000:19999 -j REDIRECT --to-ports 6000 2>/dev/null
