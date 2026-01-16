@@ -99,14 +99,45 @@ function install_udp_custom() {
 
     # 4. Download Binary
     echo_info "Downloading UDP Custom Binary..."
-    # Using a placeholder logic. If real URL is known, it works. If not, we create a dummy for safety/demo.
-    wget -O "$BINARY_PATH" "$BINARY_URL" 2>/dev/null
-    if [[ $? -ne 0 ]]; then
+    if wget -O "$BINARY_PATH" "$BINARY_URL" 2>/dev/null; then
+        echo_success "Binary downloaded successfully."
+    else
         echo_error "Failed to download binary from $BINARY_URL"
-        echo_info "Creating a dummy binary for demonstration purposes (so service can start)..."
-        echo '#!/bin/bash' > "$BINARY_PATH"
-        # Mocking the binary behavior: accepts arguments and loops
-        echo 'while true; do echo "UDP Custom (Dummy) Running with args: $@"; sleep 10; done' >> "$BINARY_PATH"
+        echo_error "File not found in repository. Please ensure 'udp-custom' is uploaded to your GitHub."
+
+        # Interactive fallback
+        while true; do
+            echo -e "${YELLOW}Please choose an action:${NC}"
+            echo -e "1) Enter an alternative URL"
+            echo -e "2) Install a dummy binary (For testing/demo only)"
+            echo -e "3) Abort installation"
+            read -p "Selection: " bin_choice
+
+            case $bin_choice in
+                1)
+                    read -p "Enter URL: " alt_url
+                    if wget -O "$BINARY_PATH" "$alt_url" 2>/dev/null; then
+                        echo_success "Binary downloaded from alternative URL."
+                        break
+                    else
+                        echo_error "Failed to download from $alt_url"
+                    fi
+                    ;;
+                2)
+                    echo_info "Creating a dummy binary..."
+                    echo '#!/bin/bash' > "$BINARY_PATH"
+                    echo 'while true; do echo "UDP Custom (Dummy) Running with args: $@"; sleep 10; done' >> "$BINARY_PATH"
+                    break
+                    ;;
+                3)
+                    echo_error "Installation Aborted."
+                    return
+                    ;;
+                *)
+                    echo "Invalid Option."
+                    ;;
+            esac
+        done
     fi
     chmod +x "$BINARY_PATH"
 

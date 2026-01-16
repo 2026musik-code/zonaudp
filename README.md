@@ -62,7 +62,23 @@ Pilih opsi `5` jika ingin menghapus script, service, dan semua konfigurasi dari 
 *   **Binary**: `/usr/local/bin/udp-custom`
 *   **Service**: `/etc/systemd/system/udp-custom.service`
 
+## Troubleshooting
+
+### Error: Failed to download binary
+
+Jika Anda melihat error ini saat instalasi:
+```
+[ERROR] Failed to download binary from https://raw.githubusercontent.com/2026musik-code/zonaudp/main/udp-custom
+```
+**Penyebab:** Anda belum mengupload file binary `udp-custom` ke repository GitHub Anda.
+
+**Solusi:**
+1. Upload file binary UDP Custom (biasanya bernama `udp-custom-linux-amd64` atau `udp-custom`) ke repository GitHub Anda (`2026musik-code/zonaudp`).
+2. Pastikan nama filenya adalah **`udp-custom`** (tanpa ekstensi .exe atau lainnya).
+3. Jalankan ulang script instalasi.
+4. Atau, jika Anda memiliki link download lain, pilih opsi **1) Enter an alternative URL** saat error muncul.
+
 ## Catatan Penting
 
-*   Pastikan Anda telah mengupload binary `udp-custom` ke repository ini (`https://github.com/2026musik-code/zonaudp`) dengan nama file `udp-custom` agar script bisa mendownloadnya dengan benar.
+*   **Wajib Upload Binary**: Script ini dirancang untuk mendownload binary dari repository Anda sendiri. Pastikan file ada.
 *   Port UDP `6000` digunakan sebagai port utama, dan port `6000-19999` di-redirect ke `6000`. Pastikan port-port ini tidak digunakan oleh service lain.
