@@ -2,13 +2,7 @@
 
 # ==============================================================================
 # UDP Custom (ZIVPN Native) Auto-Install Script
-#
-# IMPORTANT:
-# This script uses a placeholder URL for the binary.
-# You MUST update the BINARY_URL variable below with the actual link to your
-# UDP Custom binary (e.g., from your GitHub repo or VPS).
-#
-# If the download fails, a dummy binary is created for demonstration purposes.
+# Repository: https://github.com/2026musik-code/zonaudp
 # ==============================================================================
 
 # Global Variables
@@ -16,7 +10,8 @@ BINARY_PATH="/usr/local/bin/udp-custom"
 CONFIG_DIR="/etc/udp-custom"
 CONFIG_FILE="$CONFIG_DIR/config.json"
 SERVICE_FILE="/etc/systemd/system/udp-custom.service"
-BINARY_URL="https://raw.githubusercontent.com/zivpn/udp-custom-binary/main/udp-custom-linux-amd64" # Placeholder URL
+# Assumes the binary 'udp-custom' is uploaded to the root of the repo
+BINARY_URL="https://raw.githubusercontent.com/2026musik-code/zonaudp/main/udp-custom"
 
 # ANSI Colors
 RED='\033[0;31m'
@@ -77,6 +72,9 @@ function install_udp_custom() {
     apt-get update -y
 
     # Pre-configure iptables-persistent to avoid interactive prompt
+    if ! command -v debconf-set-selections &> /dev/null; then
+        apt-get install -y debconf-utils
+    fi
     echo iptables-persistent iptables-persistent/autosave_v4 boolean true | debconf-set-selections
     echo iptables-persistent iptables-persistent/autosave_v6 boolean true | debconf-set-selections
 
