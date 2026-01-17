@@ -1,13 +1,14 @@
 # UDP Custom (ZIVPN Native) Manager
 
-Script Auto-Install dan Manajemen untuk UDP Custom (ZIVPN Native) di VPS Ubuntu/Debian.
+Script Auto-Install dan Manajemen untuk UDP Custom (ZIVPN Native) di VPS Ubuntu/Debian. Script ini mendukung **Native Config Mode** dengan sertifikat SSL otomatis.
 
 Repository: [https://github.com/2026musik-code/zonaudp](https://github.com/2026musik-code/zonaudp)
 
 ## Fitur
 
-*   **Auto Install**: Otomatis download binary, setup config, dan service systemd.
-*   **User Management**: Tambah, hapus, dan lihat user dengan mudah lewat menu.
+*   **Auto Install**: Otomatis download binary, setup config JSON native, dan service systemd.
+*   **Auto SSL**: Otomatis membuat Self-Signed Certificate (`server.crt` & `server.key`) yang dibutuhkan oleh ZIVPN Native.
+*   **User Management**: Tambah, hapus, dan lihat user dengan mudah lewat menu interaktif (langsung mengedit `config.json`).
 *   **Auto Redirect**: Otomatis setting iptables redirect port `6000-19999` ke `6000`.
 *   **Optimasi**: Fitur optimasi TCP BBR dan UDP Buffer untuk gaming.
 *   **Service Status**: Cek status service dan log aktif.
@@ -33,17 +34,16 @@ Setelah menjalankan perintah di atas, Anda akan melihat menu utama:
 
 ### 1. Install UDP Custom
 Pilih opsi `1` untuk memulai instalasi.
-*   Script akan mengupdate VPS dan install dependency.
+*   Script akan mengupdate VPS dan install dependency (termasuk `openssl`).
 *   Anda akan diminta memasukkan **Obfs Key** (Default: `zivpn`).
 *   Anda akan diminta membuat **Username** dan **Password** pertama.
-*   Script akan mendownload binary `udp-custom` dan menjalankannya.
+*   Script akan mendownload binary, membuat sertifikat SSL, dan membuat file config `/etc/udp-custom/config.json`.
 
 ### 2. Manage Users
 Pilih opsi `2` untuk mengelola user.
-*   **Add User**: Tambah user baru.
+*   **Add User**: Tambah user baru ke dalam config. User baru langsung aktif setelah otomatis restart service.
 *   **Remove User**: Hapus user yang ada.
-*   **List Users**: Lihat daftar user dan password.
-*   Setiap perubahan user akan otomatis me-restart service agar efeknya langsung jalan.
+*   **List Users**: Lihat daftar user dan password yang terdaftar.
 
 ### 3. Check Service Status
 Pilih opsi `3` untuk melihat apakah service berjalan (`Active: running`) dan melihat log koneksi terakhir.
@@ -59,6 +59,7 @@ Pilih opsi `5` jika ingin menghapus script, service, dan semua konfigurasi dari 
 ## Struktur File
 
 *   **Config**: `/etc/udp-custom/config.json`
+*   **Certificate**: `/etc/udp-custom/server.crt` & `/etc/udp-custom/server.key`
 *   **Binary**: `/usr/local/bin/udp-custom`
 *   **Service**: `/etc/systemd/system/udp-custom.service`
 
@@ -81,4 +82,5 @@ Jika Anda melihat error ini saat instalasi:
 ## Catatan Penting
 
 *   **Wajib Upload Binary**: Script ini dirancang untuk mendownload binary dari repository Anda sendiri. Pastikan file ada.
+*   **SSL Certificate**: Script ini menggunakan *Self-Signed Certificate*. Ini sudah cukup untuk ZIVPN UDP Tunnel.
 *   Port UDP `6000` digunakan sebagai port utama, dan port `6000-19999` di-redirect ke `6000`. Pastikan port-port ini tidak digunakan oleh service lain.
